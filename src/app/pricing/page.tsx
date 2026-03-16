@@ -12,11 +12,13 @@ declare global {
 }
 
 const PREMIUM_PRICE_INR = 100;
+const PREMIUM_DURATION_DAYS = 30; // 1 month
 
 export default function PricingPage() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isPremium, setIsPremium] = useState(false);
+  const [premiumExpiry, setPremiumExpiry] = useState<string | null>(null);
 
   useEffect(() => {
     checkUser();
@@ -36,11 +38,29 @@ export default function PricingPage() {
       setUser(user);
       const { data: profile } = await supabase
         .from('users')
-        .select('is_premium')
+        .select('is_premium, premium_expires_at')
         .eq('id', user.id)
         .single();
       if (profile) {
-        setIsPremium(profile.is_premium);
+        // Check if premium has expired
+        if (profile.premium_expires_at) {
+          const expiryDate = new Date(profile.premium_expires_at);
+          const now = new Date();
+          if (expiryDate > now) {
+            setIsPremium(true);
+            setPremiumExpiry(profile.premium_expires_at);
+          } else {
+            // Premium expired - reset to free
+            await supabase
+              .from('users')
+              .update({ is_premium: false, premium_expires_at: null })
+              .eq('id', user.id);
+            setIsPremium(false);
+            setPremiumExpiry(null);
+          }
+        } else {
+          setIsPremium(false);
+        }
       }
     }
   };
@@ -94,17 +114,22 @@ export default function PricingPage() {
 
   const verifyPayment = async (response: any, userId: string) => {
     try {
+      // Calculate expiry date (1 month from now)
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + PREMIUM_DURATION_DAYS);
+      
       const { error } = await supabase
         .from('users')
         .update({ 
           is_premium: true, 
-          premium_expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString() 
+          premium_expires_at: expiryDate.toISOString() 
         })
         .eq('id', userId);
 
       if (!error) {
         setIsPremium(true);
-        alert('Payment successful! You are now a Premium member!');
+        setPremiumExpiry(expiryDate.toISOString());
+        alert(`Payment successful! You are now a Premium member for ${PREMIUM_DURATION_DAYS} days!`);
       }
     } catch (error) {
       console.error('Verification error:', error);
@@ -135,7 +160,7 @@ export default function PricingPage() {
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-4xl font-bold mb-4">
             Simple, <span className="text-yellow-400">Affordable</span> Pricing
           </motion.h1>
-          <p className="text-gray-400">One-time payment. Lifetime access.</p>
+          <p className="text-gray-400">Pay ₹100/month. Renew anytime.</p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
@@ -164,8 +189,21 @@ export default function PricingPage() {
             </ul>
             
             {isPremium ? (
-              <div className="w-full py-4 bg-green-600 rounded-xl text-white font-bold text-lg text-center">
-                ✓ You are Premium!
+              <div className="space-y-3">
+                <div className="w-full py-4 bg-green-600 rounded-xl text-white font-bold text-lg text-center">
+                  ✓ You are Premium!
+                </div>
+                {premiumExpiry && (
+                  <p className="text-sm text-gray-400 text-center">
+                    Expires: {new Date(premiumExpiry).toLocaleDateString()}
+                  </p>
+                )}
+                <button 
+                  onClick={handlePayment}
+                  className="w-full py-3 bg-gradient-to-r from-yellow-500 to-amber-500 rounded-xl text-black font-bold"
+                >
+                  Renew (₹{PREMIUM_PRICE_INR}/month)
+                </button>
               </div>
             ) : (
               <button 
