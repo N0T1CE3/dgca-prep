@@ -5,14 +5,52 @@ import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 
 export default function AdminSetupPage() {
-  const [userId, setUserId] = useState('');
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    checkUser();
+  }, []);
+
+  const checkUser = async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        setUser(authUser);
+        
+        // Check if user already exists in users table
+        const { data: userData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authUser.id)
+          .single();
+        
+        if (!userData) {
+          // Create user profile first
+          await supabase.from('users').insert([{
+            id: authUser.id,
+            email: authUser.email,
+            name: authUser.user_metadata?.name || authUser.email?.split('@')[0],
+            role: 'user'
+          }]);
+        }
+      } else {
+        // Redirect to login
+        window.location.href = '/login';
+      }
+    } catch (err) {
+      console.error('Auth check error:', err);
+    } finally {
+      setCheckingAuth(false);
+    }
+  };
 
   const handleSetAdmin = async () => {
-    if (!userId.trim()) {
-      setError('Please enter a User ID');
+    if (!user) {
+      setError('Please login first');
       return;
     }
 
@@ -21,18 +59,23 @@ export default function AdminSetupPage() {
     setResult(null);
 
     try {
-      const response = await fetch('/api/admin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: userId.trim(), role: 'admin' }),
-      });
+      // Update directly using the client - user can update their own profile
+      const { data, error: updateError } = await supabase
+        .from('users')
+        .update({ role: 'admin' })
+        .eq('id', user.id)
+        .select()
+        .single();
 
-      const data = await response.json();
-
-      if (response.ok) {
-        setResult(data);
+      if (updateError) {
+        // If RLS prevents this, show error with instructions
+        if (updateError.code === '42501') {
+          setError('Permission denied. Please add SUPABASE_SERVICE_ROLE_KEY to Vercel env vars, or set role manually in Supabase dashboard.');
+        } else {
+          setError(updateError.message);
+        }
       } else {
-        setError(data.error || 'Failed to set admin');
+        setResult({ message: 'You are now an admin! Go to /admin to manage questions.' });
       }
     } catch (err: any) {
       setError(err.message);
@@ -40,6 +83,14 @@ export default function AdminSetupPage() {
       setLoading(false);
     }
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center px-6">
@@ -51,20 +102,17 @@ export default function AdminSetupPage() {
 
         <div className="bg-gray-900/80 backdrop-blur-xl rounded-2xl border border-gray-700/50 p-8">
           <h1 className="text-2xl font-bold text-center mb-2">Admin Setup</h1>
-          <p className="text-gray-400 text-center mb-6">Set up admin privileges for a user</p>
+          <p className="text-gray-400 text-center mb-6">Make yourself an admin user</p>
+
+          {user && (
+            <div className="mb-6 p-4 bg-gray-800/50 rounded-xl">
+              <p className="text-sm text-gray-400 mb-1">Logged in as:</p>
+              <p className="font-medium">{user.email}</p>
+              <p className="text-xs text-gray-500 mt-1">ID: {user.id}</p>
+            </div>
+          )}
 
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">User ID (UUID)</label>
-              <input
-                type="text"
-                value={userId}
-                onChange={(e) => setUserId(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white"
-                placeholder="Enter Supabase User ID"
-              />
-            </div>
-
             {error && (
               <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
                 {error}
@@ -79,20 +127,26 @@ export default function AdminSetupPage() {
 
             <button
               onClick={handleSetAdmin}
-              disabled={loading}
+              disabled={loading || !user}
               className="w-full py-3 bg-gradient-to-r from-yellow-500 to-amber-500 rounded-xl text-black font-bold disabled:opacity-50"
             >
-              {loading ? 'Setting Admin...' : 'Set as Admin'}
+              {loading ? 'Setting Admin...' : 'Make Me Admin'}
             </button>
+
+            <Link href="/dashboard" className="block w-full py-3 text-center bg-gray-800 rounded-xl text-white font-medium">
+              Go to Dashboard
+            </Link>
           </div>
 
-          <div className="mt-6 p-4 bg-gray-800/50 rounded-xl">
-            <h3 className="text-sm font-bold mb-2">How to get User ID:</h3>
-            <ol className="text-sm text-gray-400 space-y-1">
-              <li>1. Go to Supabase Dashboard</li>
-              <li>2. Select your project → Authentication → Users</li>
-              <li>3. Click on the user you want to make admin</li>
-              <li>4. Copy the User ID from the user details</li>
+          <div className="mt-6 p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl">
+            <h3 className="text-sm font-bold mb-2 text-blue-400">Note:</h3>
+            <p className="text-sm text-gray-400">
+              If you get a permission error, you'll need to set the role manually in Supabase:
+            </p>
+            <ol className="text-sm text-gray-400 space-y-1 mt-2">
+              <li>1. Go to Supabase Dashboard → Table Editor → users</li>
+              <li>2. Find your user row</li>
+              <li>3. Click edit and change role to 'admin'</li>
             </ol>
           </div>
         </div>
