@@ -5,6 +5,13 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 
+type User = {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+};
+
 type Subject = {
   id: string;
   name: string;
@@ -28,6 +35,9 @@ type Question = {
 };
 
 export default function AdminPage() {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'subjects' | 'questions'>('subjects');
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -45,12 +55,60 @@ export default function AdminPage() {
     explanation: '',
     is_sample: false,
   });
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => { 
-    fetchSubjects(); 
-    if (activeTab === 'questions') fetchQuestions();
-  }, [activeTab]);
+    checkAdminAccess(); 
+  }, []);
+
+  useEffect(() => { 
+    if (isAdmin) {
+      fetchSubjects(); 
+      if (activeTab === 'questions') fetchQuestions();
+    }
+  }, [activeTab, isAdmin]);
+
+  const checkAdminAccess = async () => {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        window.location.href = '/login';
+        return;
+      }
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('id, email, name, role')
+        .eq('id', authUser.id)
+        .single();
+
+      if (userData) {
+        setCurrentUser(userData);
+        if (userData.role === 'admin') {
+          setIsAdmin(true);
+        } else {
+          alert('Access denied. Admin privileges required.');
+          window.location.href = '/dashboard';
+        }
+      } else {
+        // Create user profile if doesn't exist
+        const newUser = {
+          id: authUser.id,
+          email: authUser.email || 'user@example.com',
+          name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'User',
+          role: 'admin', // First user becomes admin for testing
+        };
+        await supabase.from('users').insert([newUser]);
+        setCurrentUser(newUser);
+        setIsAdmin(true);
+      }
+    } catch (error) {
+      console.error('Admin check error:', error);
+      window.location.href = '/login';
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchSubjects = async () => {
     const { data } = await supabase.from('subjects').select('*').order('display_order');
@@ -66,7 +124,7 @@ export default function AdminPage() {
 
   const addSubject = async () => {
     if (!newSubject.name.trim()) return;
-    setLoading(true);
+    setSaving(true);
     await supabase.from('subjects').insert([{ 
       ...newSubject, 
       is_active: true, 
@@ -77,12 +135,12 @@ export default function AdminPage() {
     fetchSubjects(); 
     setShowSubjectModal(false); 
     setNewSubject({ name: '', description: '', icon: '📚' });
-    setLoading(false);
+    setSaving(false);
   };
 
   const addQuestion = async () => {
     if (!newQuestion.question_text.trim() || !selectedSubject) return;
-    setLoading(true);
+    setSaving(true);
     await supabase.from('questions').insert([{
       subject_id: selectedSubject,
       ...newQuestion,
@@ -100,7 +158,7 @@ export default function AdminPage() {
       explanation: '',
       is_sample: false,
     });
-    setLoading(false);
+    setSaving(false);
   };
 
   const toggleSubjectActive = async (subject: Subject) => {
@@ -119,6 +177,10 @@ export default function AdminPage() {
     fetchQuestions();
   };
 
+  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" /></div>;
+
+  if (!isAdmin) return null;
+
   return (
     <div className="min-h-screen bg-gray-950">
       <nav className="sticky top-0 z-50 bg-gray-950/80 backdrop-blur-xl border-b border-gray-800/50">
@@ -126,6 +188,7 @@ export default function AdminPage() {
           <Link href="/dashboard" className="text-gray-400 hover:text-white">← Back</Link>
           <h1 className="text-xl font-bold">Admin Panel</h1>
           <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded">Admin</span>
+          {currentUser && <span className="text-gray-500 text-sm">({currentUser.email})</span>}
         </div>
       </nav>
 
@@ -213,7 +276,7 @@ export default function AdminPage() {
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowSubjectModal(false)} className="flex-1 py-3 bg-gray-800 rounded-xl text-white font-medium">Cancel</button>
-              <button onClick={addSubject} disabled={loading} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-medium disabled:opacity-50">{loading ? 'Adding...' : 'Add Subject'}</button>
+              <button onClick={addSubject} disabled={saving} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-medium disabled:opacity-50">{saving ? 'Adding...' : 'Add Subject'}</button>
             </div>
           </motion.div>
         </div>
@@ -279,7 +342,7 @@ export default function AdminPage() {
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowQuestionModal(false)} className="flex-1 py-3 bg-gray-800 rounded-xl text-white font-medium">Cancel</button>
-              <button onClick={addQuestion} disabled={loading || !selectedSubject} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-medium disabled:opacity-50">{loading ? 'Adding...' : 'Add Question'}</button>
+              <button onClick={addQuestion} disabled={saving || !selectedSubject} className="flex-1 py-3 bg-blue-600 rounded-xl text-white font-medium disabled:opacity-50">{saving ? 'Adding...' : 'Add Question'}</button>
             </div>
           </motion.div>
         </div>

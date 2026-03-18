@@ -10,6 +10,7 @@ CREATE TABLE public.users (
   email TEXT UNIQUE NOT NULL,
   name TEXT,
   avatar_url TEXT,
+  role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin')),
   is_premium BOOLEAN DEFAULT false,
   premium_expires_at TIMESTAMPTZ,
   total_xp INTEGER DEFAULT 0,
@@ -169,6 +170,14 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Add role column if it doesn't exist (for existing databases)
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'role') THEN
+    ALTER TABLE public.users ADD COLUMN role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin'));
+  END IF;
+END $$;
 
 -- Insert demo subjects
 INSERT INTO public.subjects (name, description, icon, color, sample_count, total_questions, display_order) VALUES
