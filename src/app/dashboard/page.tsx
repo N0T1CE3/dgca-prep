@@ -33,8 +33,13 @@ export default function DashboardPage() {
             <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">DGCA Prep</span>
           </Link>
           <div className="flex items-center gap-4">
+            {user?.role === 'admin' && (
+              <Link href="/admin" className="px-4 py-2 bg-yellow-500/20 border border-yellow-500/50 rounded-lg text-yellow-400 font-medium">
+                Admin Panel
+              </Link>
+            )}
             <div className="px-4 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-              <span className="font-bold text-yellow-400">⭐ 0 XP</span>
+              <span className="font-bold text-yellow-400">⭐ {user?.total_xp || 0} XP</span>
             </div>
             {!user?.is_premium && <Link href="/pricing" className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-amber-500 rounded-lg text-black font-medium">Upgrade</Link>}
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center font-bold">{user?.name?.charAt(0)}</div>
@@ -45,8 +50,17 @@ export default function DashboardPage() {
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-r from-blue-600/20 to-cyan-600/20 rounded-2xl border border-blue-500/30 p-6 mb-8">
-          <h1 className="text-2xl font-bold mb-2">Welcome back, {user?.name?.split(' ')[0]}! 👨‍✈️</h1>
-          <p className="text-gray-400">Ready to continue your flight training?</p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-2xl font-bold mb-2">Welcome back, {user?.name?.split(' ')[0]}! 👨‍✈️</h1>
+              <p className="text-gray-400">Ready to continue your flight training?</p>
+            </div>
+            {user?.role === 'admin' && (
+              <span className="px-3 py-1 bg-yellow-500/20 border border-yellow-500/50 rounded-full text-yellow-400 text-sm font-medium">
+                Admin
+              </span>
+            )}
+          </div>
         </motion.div>
 
         {user?.is_premium && <div className="mb-8"><HealthBar health={100} size="lg" /></div>}
@@ -75,6 +89,29 @@ export default function DashboardPage() {
             </div>
           </motion.div>
         </div>
+
+        {user?.role === 'admin' && (
+          <div className="mt-12">
+            <h2 className="text-xl font-bold mb-4 text-yellow-400">Admin Section</h2>
+            <div className="grid md:grid-cols-3 gap-4">
+              <Link href="/admin" className="bg-gray-900/80 rounded-xl border border-yellow-500/30 p-6 hover:border-yellow-500/60 transition-colors">
+                <div className="text-3xl mb-3">📝</div>
+                <h3 className="font-bold mb-1">Manage Questions</h3>
+                <p className="text-sm text-gray-400">Add, edit, or delete questions</p>
+              </Link>
+              <Link href="/admin/users" className="bg-gray-900/80 rounded-xl border border-yellow-500/30 p-6 hover:border-yellow-500/60 transition-colors">
+                <div className="text-3xl mb-3">👥</div>
+                <h3 className="font-bold mb-1">Manage Users</h3>
+                <p className="text-sm text-gray-400">View and manage user accounts</p>
+              </Link>
+              <Link href="/admin/subjects" className="bg-gray-900/80 rounded-xl border border-yellow-500/30 p-6 hover:border-yellow-500/60 transition-colors">
+                <div className="text-3xl mb-3">📚</div>
+                <h3 className="font-bold mb-1">Manage Subjects</h3>
+                <p className="text-sm text-gray-400">Add or edit subjects</p>
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ export interface User {
   email: string;
   name: string;
   avatar_url?: string;
+  role: 'user' | 'admin';
   is_premium: boolean;
   premium_expires_at?: string;
   total_xp: number;
