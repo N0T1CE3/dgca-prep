@@ -95,6 +95,17 @@ CREATE TABLE public.payments (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Feedback table
+CREATE TABLE public.feedback (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  user_email TEXT,
+  type TEXT DEFAULT 'suggestion' CHECK (type IN ('bug', 'suggestion', 'complaint', 'other')),
+  message TEXT NOT NULL,
+  is_resolved BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Weekly Leaderboard View
 CREATE OR REPLACE VIEW public.weekly_leaderboard AS
 SELECT 
@@ -151,6 +162,17 @@ CREATE POLICY "Users can manage own chapter progress" ON public.user_chapter_pro
 -- Payments policies
 CREATE POLICY "Users can view own payments" ON public.payments FOR SELECT USING (auth.uid() = user_id);
 
+-- Feedback policies
+ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can submit feedback" ON public.feedback FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+CREATE POLICY "Users can view own feedback" ON public.feedback FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Admins can view all feedback" ON public.feedback FOR SELECT USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+CREATE POLICY "Admins can update feedback" ON public.feedback FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+
 -- Function to create user profile on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
@@ -190,3 +212,27 @@ CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHE
 INSERT INTO public.subjects (name, description, icon, color, sample_count, total_questions, display_order) VALUES
 ('Aviation Meteorology', 'IC Joshi - Complete question bank with detailed explanations covering atmosphere, weather systems, and aviation weather hazards.', '🌤️', 'from-blue-500 to-cyan-500', 10, 500, 1),
 ('Air Regulations', 'RK Bali - DGCA style practice questions covering ICAO conventions, aircraft registration, and Indian aviation law.', '⚖️', 'from-purple-500 to-pink-500', 10, 1000, 2);
+
+-- Migration: Create feedback table if not exists
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'feedback') THEN
+    CREATE TABLE public.feedback (
+      id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+      user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+      user_email TEXT,
+      type TEXT DEFAULT 'suggestion' CHECK (type IN ('bug', 'suggestion', 'complaint', 'other')),
+      message TEXT NOT NULL,
+      is_resolved BOOLEAN DEFAULT false,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    
+    ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
+    
+    CREATE POLICY "Users can submit feedback" ON public.feedback FOR INSERT WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+    CREATE POLICY "Users can view own feedback" ON public.feedback FOR SELECT USING (auth.uid() = user_id);
+    CREATE POLICY "Admins can view all feedback" ON public.feedback FOR SELECT USING (
+      EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+    );
+  END IF;
+END $$;

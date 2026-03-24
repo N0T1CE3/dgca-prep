@@ -5,11 +5,13 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { HealthBar } from '@/components/quiz/HealthBar';
+import { ProfileDrawer } from '@/components/ProfileDrawer';
 import type { User } from '@/types';
 
 export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileDrawerOpen, setProfileDrawerOpen] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -42,8 +44,12 @@ export default function DashboardPage() {
               <span className="font-bold text-yellow-400">⭐ {user?.total_xp || 0} XP</span>
             </div>
             {!user?.is_premium && <Link href="/pricing" className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-amber-500 rounded-lg text-black font-medium">Upgrade</Link>}
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center font-bold">{user?.name?.charAt(0)}</div>
-            <button onClick={async () => { await supabase.auth.signOut(); window.location.href = '/'; }} className="p-2 text-gray-400 hover:text-white">Logout</button>
+            <button 
+              onClick={() => setProfileDrawerOpen(true)}
+              className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center font-bold hover:ring-2 hover:ring-blue-500/50 transition-all"
+            >
+              {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+            </button>
           </div>
         </div>
       </nav>
@@ -94,7 +100,7 @@ export default function DashboardPage() {
           <div className="mt-12">
             <h2 className="text-xl font-bold mb-4 text-yellow-400">Admin Section</h2>
             <div className="grid md:grid-cols-3 gap-4">
-              <Link href="/admin" className="bg-gray-900/80 rounded-xl border border-yellow-500/30 p-6 hover:border-yellow-500/60 transition-colors">
+<Link href="/admin" className="bg-gray-900/80 rounded-xl border border-yellow-500/30 p-6 hover:border-yellow-500/60 transition-colors">
                 <div className="text-3xl mb-3">📝</div>
                 <h3 className="font-bold mb-1">Manage Questions</h3>
                 <p className="text-sm text-gray-400">Add, edit, or delete questions</p>
@@ -113,6 +119,13 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Profile Drawer */}
+      <ProfileDrawer 
+        isOpen={profileDrawerOpen} 
+        onClose={() => setProfileDrawerOpen(false)} 
+        user={user}
+      />
     </div>
   );
 }
